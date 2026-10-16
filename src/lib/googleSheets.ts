@@ -1,11 +1,13 @@
 /**
  * Google Sheets integration helpers.
  *
- * Supports two URL patterns from Google Sheets:
- *   - Published-to-web CSV:   https://docs.google.com/spreadsheets/d/{id}/pub?output=csv
+ * Supports three URL patterns from Google Sheets:
  *   - Standard edit URL:      https://docs.google.com/spreadsheets/d/{id}/edit#gid=0
+ *   - Published-to-web HTML:  https://docs.google.com/spreadsheets/d/e/{encoded}/pubhtml?gid=0
+ *   - Published-to-web CSV:   https://docs.google.com/spreadsheets/d/e/{encoded}/pub?output=csv
  *
- * Standard edit URLs are converted to the CSV export URL automatically.
+ * Standard edit URLs are converted to /export?format=csv;
+ * published URLs (/e/{encoded}/pub*) use /pub?output=csv.
  */
 
 import type { DataRow } from "../types";
@@ -14,18 +16,48 @@ import type { DataRow } from "../types";
 
 /**
  * Extract the spreadsheet ID from any Google Sheets URL.
- * Returns null if the URL isn't a recognisable Google Sheets link.
+ * Returns { id, isPublished } or null.
+ *
+ * Handles:
+ *   - Standard edit:    /spreadsheets/d/{id}/edit#gid=0
+ *   - Published-to-web: /spreadsheets/d/e/{encodedId}/pubhtml?gid=0
+ *   - Published CSV:    /spreadsheets/d/e/{encodedId}/pub?output=csv&gid=0
+ *   - Direct CSV:       /spreadsheets/d/{id}/export?format=csv
  */
-export function extractSheetId(url: string): string | null {
+export interface SheetInfo {
+  id: string;
+  isPublished: boolean;
+}
+
+export function parseSheetUrl(url: string): SheetInfo | null {
   try {
     const parsed = new URL(url.trim());
     if (parsed.hostname !== "google.com" && !parsed.hostname.endsWith(".google.com")) return null;
-    // Path format: /spreadsheets/d/{id}/...
-    const match = parsed.pathname.match(/\/spreadsheets\/d\/([^/]+)/);
-    return match ? match[1] : null;
+
+    // Published format: /spreadsheets/d/e/{encodedId}/pubhtml or /pub?output=csv
+    const pubMatch = parsed.pathname.match(/\/spreadsheets\/d\/(e\/[^/]+)\/(?:pub|pubhtml)/);
+    if (pubMatch) {
+      return { id: pubMatch[1], isPublished: true };
+    }
+
+    // Standard edit/export format: /spreadsheets/d/{id}/...
+    const editMatch = parsed.pathname.match(/\/spreadsheets\/d\/([^/]+)/);
+    if (editMatch) {
+      return { id: editMatch[1], isPublished: false };
+    }
+
+    return null;
   } catch {
     return null;
   }
+}
+
+/**
+ * @deprecated Use parseSheetUrl() instead — kept for backward-compat callers.
+ */
+export function extractSheetId(url: string): string | null {
+  const info = parseSheetUrl(url);
+  return info ? info.id : null;
 }
 
 /**
@@ -45,14 +77,20 @@ function extractGid(url: string): string {
 }
 
 /**
- * Convert any Google Sheets URL to its published CSV export URL.
- * If the URL is already a /pub?output=csv URL it is returned as-is.
+ * Convert any Google Sheets URL to its CSV export URL.
+ * Published URLs (e/{encodedId}) use /pub?output=csv;
+ * standard edit URLs use /export?format=csv.
  */
 export function toCsvUrl(url: string): string | null {
-  const id = extractSheetId(url);
-  if (!id) return null;
+  const info = parseSheetUrl(url);
+  if (!info) return null;
   const gid = extractGid(url);
-  return `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
+
+  if (info.isPublished) {
+    return `https://docs.google.com/spreadsheets/d/${info.id}/pub?output=csv&gid=${gid}`;
+  }
+
+  return `https://docs.google.com/spreadsheets/d/${info.id}/export?format=csv&gid=${gid}`;
 }
 
 // ── CSV parser ───────────────────────────────────────────────
