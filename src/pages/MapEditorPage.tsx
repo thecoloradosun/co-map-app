@@ -21,6 +21,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { getMap, updateMap, type MapDetail } from "../lib/api";
 import { DesignProvider } from "../context/DesignContext";
+import { loadFaIconNames } from "../lib/faIcons";
 import MapEditorContent from "../components/MapEditorContent";
 import EmbedCodeBanner from "../components/EmbedCodeBanner";
 import DataTabBar from "../components/DataTabBar";
@@ -119,6 +120,8 @@ export default function MapEditorPage() {
     setLoading(true);
     setError(null);
     try {
+      // Wait for FontAwesome icons to be registered before rendering markers
+      await loadFaIconNames();
       const data = await getMap(id);
       setMapData(data);
       setDataConfig(parseDataConfig(data.data_config ?? {}));

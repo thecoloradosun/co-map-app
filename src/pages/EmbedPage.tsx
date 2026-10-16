@@ -6,6 +6,7 @@ import MapEditorContent from "../components/MapEditorContent";
 import { layerDataToPoints, ensureRowUUIDs } from "../lib/starterData";
 import { prefetchTiles } from "../lib/tilePrefetch";
 import { getTileConfig, MAP_MAX_BOUNDS } from "../config";
+import { loadFaIconNames } from "../lib/faIcons";
 import type { ViewCuration, LayerData, PointData } from "../types";
 
 /**
@@ -44,8 +45,8 @@ export default function EmbedPage() {
 
   useEffect(() => {
     if (!id) return;
-    getMap(id)
-      .then(setMapData)
+    Promise.all([getMap(id), loadFaIconNames()])
+      .then(([data]) => setMapData(data))
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load map"));
   }, [id]);
 
